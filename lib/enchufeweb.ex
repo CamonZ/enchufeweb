@@ -1,6 +1,6 @@
 defmodule Enchufeweb do
   @moduledoc """
-  `Enchufeweb` is a websocket client library written in Elixir and based on 
+  `Enchufeweb` is a websocket client library written in Elixir and based on
   the Erlang library [websocket_client](https://hex.pm/packages/websocket_client).
   """
 
@@ -8,7 +8,6 @@ defmodule Enchufeweb do
   @type conn_mode :: :disconnected | :once | :reconnect
   @type websocket_req :: map
   @type state :: any
-
 
   @doc """
   Callback which will be called when a message is received.
@@ -20,10 +19,11 @@ defmodule Enchufeweb do
   * {:reply, reply, state} : It will send `reply` to the server.
   * {:close, reason, state} : It will close the connection due to `reason`.
   """
-  @callback handle_message(frame, state) :: {:ok, state} 
-                                            | {:reply, frame, state} 
-                                            | {:close, binary, state}
-  
+  @callback handle_message(frame, state) ::
+              {:ok, state}
+              | {:reply, frame, state}
+              | {:close, binary, state}
+
   @doc """
   Callback which will be called when the connection has been made.
 
@@ -37,11 +37,12 @@ defmodule Enchufeweb do
   * {:reply, reply, state} : It will directly send `reply` to the server.
   * {:close, reason, state} : It will close the connection due to `reason`.
   """
-  @callback handle_connection(websocket_req, state) :: {:ok, state} 
-                                                       | {:ok , number, state} 
-                                                       | {:reply, frame, state} 
-                                                       | {:close, binary, state}
-  
+  @callback handle_connection(websocket_req, state) ::
+              {:ok, state}
+              | {:ok, number, state}
+              | {:reply, frame, state}
+              | {:close, binary, state}
+
   @doc """
   Callback which will be called when the connection is closed
 
@@ -55,33 +56,35 @@ defmodule Enchufeweb do
   * {:reconnect, delay, state} : It tries to reconnect after `delay` ms.
   * {:close, reason, state} : It terminates the process.
   """
-  @callback handle_disconnection(websocket_req, state) :: {:ok, state} 
-                                                          | {:reconnect, state} 
-                                                          | {:reconnect, integer, state} 
-                                                          | {:close, binary, state}
+  @callback handle_disconnection(websocket_req, state) ::
+              {:ok, state}
+              | {:reconnect, state}
+              | {:reconnect, integer, state}
+              | {:close, binary, state}
 
   defmacro __using__(_) do
     quote do
       @behaviour Enchufeweb
       require Logger
 
-      @msg_after_conn_time    10
+      @msg_after_conn_time 10
 
       def start_link(args) do
         {:ok, url} = Keyword.fetch(args, :url)
         :websocket_client.start_link(url, __MODULE__, args, args)
       end
 
-      def ws_send(ws, message) do 
+      def ws_send(ws, message) do
         frame = make_frame(message)
         :websocket_client.cast(ws, frame)
       end
 
       def init(args) do
-        conn_mode = 
+        conn_mode =
           with {:ok, ws_opts} <- Keyword.fetch(args, :ws_opts),
                {:ok, conn_mode} <- Map.fetch(ws_opts, :conn_mode),
-          do: conn_mode
+               do: conn_mode
+
         mode = if conn_mode == :disconnected, do: :ok, else: conn_mode
         :crypto.start()
         :ssl.start()
@@ -91,8 +94,14 @@ defmodule Enchufeweb do
       def onconnect(msg, state) do
         case handle_connection(msg, state) do
           {:reply, reply, new_statte} ->
-            Process.send_after(self(), make_frame(reply), @msg_after_conn_time)
+            Process.send_after(
+              self(),
+              make_frame(reply),
+              @msg_after_conn_time
+            )
+
             {:ok, new_statte}
+
           response ->
             response
         end
@@ -100,8 +109,8 @@ defmodule Enchufeweb do
 
       def ondisconnect(reason, state), do: handle_disconnection(reason, state)
 
-      def websocket_info(msg, _conn_state, state), do: {:reply, msg, state}    
-    
+      def websocket_info(msg, _conn_state, state), do: {:reply, msg, state}
+
       def websocket_terminate(_msg, _conn_state, _state), do: :ok
 
       def websocket_handle({type, msg}, _conn_state, state) do
@@ -113,21 +122,25 @@ defmodule Enchufeweb do
             msg == "" -> type
             true -> msg
           end
+
         case handle_message(data, state) do
           {:reply, reply, new_statte} ->
             {:reply, make_frame(reply), new_statte}
+
           {:close, reason, new_statte} ->
             {:close, reason, state}
+
           _ ->
             {:ok, state}
-        end 
+        end
       end
 
       defp make_frame(data) do
         cond do
-          is_atom(data) -> 
+          is_atom(data) ->
             data
-          is_binary(data) -> 
+
+          is_binary(data) ->
             if String.valid?(data), do: {:text, data}, else: {:binary, data}
         end
       end
@@ -144,8 +157,8 @@ defmodule Enchufeweb do
       * :once : It only tries one connection
       * :reconnect : It will try to reconnect until it get it
   """
-  @spec start_link([url: binary, ws_opts: map]) :: {:ok, pid} | {:error, term}
-  def start_link([url: url, ws_opts: ws_opts]) do
+  @spec start_link(url: binary, ws_opts: map) :: {:ok, pid} | {:error, term}
+  def start_link(url: url, ws_opts: ws_opts) do
     :websocket_client.start_link(url, __MODULE__, ws_opts)
   end
 
@@ -154,5 +167,4 @@ defmodule Enchufeweb do
   """
   @spec ws_send(pid, frame) :: :ok
   def ws_send(ws, message), do: :websocket_client.cast(ws, message)
-
 end
